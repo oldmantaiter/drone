@@ -164,16 +164,7 @@ func DeleteBuild(c *gin.Context) {
 		return
 	}
 
-	proc.State = model.StatusKilled
-	proc.Stopped = time.Now().Unix()
-	if proc.Started == 0 {
-		proc.Started = proc.Stopped
-	}
-	proc.ExitCode = 137
-	// TODO cancel child procs
-	store.FromContext(c).ProcUpdate(proc)
-
-	Config.Services.Queue.Error(context.Background(), fmt.Sprint(proc.ID), queue.ErrCancel)
+	killRunningBuild(c, proc)
 	c.String(204, "")
 }
 
@@ -204,26 +195,7 @@ func ZombieKill(c *gin.Context) {
 		return
 	}
 
-	for _, proc := range procs {
-		if proc.Running() {
-			proc.State = model.StatusKilled
-			proc.ExitCode = 137
-			proc.Stopped = time.Now().Unix()
-			if proc.Started == 0 {
-				proc.Started = proc.Stopped
-			}
-		}
-	}
-
-	for _, proc := range procs {
-		store.FromContext(c).ProcUpdate(proc)
-		Config.Services.Queue.Error(context.Background(), fmt.Sprint(proc.ID), queue.ErrCancel)
-	}
-
-	build.Status = model.StatusKilled
-	build.Finished = time.Now().Unix()
-	store.FromContext(c).UpdateBuild(build)
-
+	forceKillBuild(c, build, procs)
 	c.String(204, "")
 }
 
@@ -715,3 +687,38 @@ var deleteStr = `[
 	  "out": "logs purged by %s on %s\n"
 	}
 ]`
+
+func killRunningBuild(c *gin.Context, proc *model.Proc) {
+	proc.State = model.StatusKilled
+	proc.Stopped = time.Now().Unix()
+	if proc.Started == 0 {
+		proc.Started = proc.Stopped
+	}
+	proc.ExitCode = 137
+	// TODO cancel child procs
+	store.FromContext(c).ProcUpdate(proc)
+
+	Config.Services.Queue.Error(context.Background(), fmt.Sprint(proc.ID), queue.ErrCancel)
+}
+
+func forceKillBuild(c *gin.Context, build *model.Build, procs []*model.Proc) {
+	for _, proc := range procs {
+		if proc.Running() {
+			proc.State = model.StatusKilled
+			proc.ExitCode = 137
+			proc.Stopped = time.Now().Unix()
+			if proc.Started == 0 {
+				proc.Started = proc.Stopped
+			}
+		}
+	}
+	for _, proc := range procs {
+		store.FromContext(c).ProcUpdate(proc)
+		Config.Services.Queue.Error(context.Background(), fmt.Sprint(proc.ID), queue.ErrCancel)
+	}
+
+	build.Status = model.StatusKilled
+	build.Started = time.Now().Unix()
+	build.Finished = build.Started
+	store.FromContext(c).UpdateBuild(build)
+}
