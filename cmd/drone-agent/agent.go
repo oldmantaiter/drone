@@ -34,7 +34,7 @@ func loop(c *cli.Context) error {
 		Labels: map[string]string{
 			"platform": c.String("platform"),
 		},
-		Expr: c.String("drone-filter"),
+		Expr: c.String("filter"),
 	}
 
 	hostname := c.String("hostname")
@@ -77,7 +77,7 @@ func loop(c *cli.Context) error {
 			password: c.String("password"),
 		}),
 		grpc.WithKeepaliveParams(keepalive.ClientParameters{
-			Time: c.Duration("keepalive-time"),
+			Time:    c.Duration("keepalive-time"),
 			Timeout: c.Duration("keepalive-timeout"),
 		}),
 	)

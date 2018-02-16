@@ -1,6 +1,6 @@
 # docker build --rm -f Dockerfile.agent -t drone/agent .
 
-FROM drone/ca-certs
+FROM golang:1.9.3-stretch
 ENV GODEBUG=netdns=go
 ADD release/drone-agent /bin/
 

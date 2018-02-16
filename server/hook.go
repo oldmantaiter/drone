@@ -256,7 +256,7 @@ func PostHook(c *gin.Context) {
 	// of the last build, killing it in the same method that cancelling build uses
 	if config.Experimental.AutoCancelRunning {
 		proc, err := store.FromContext(c).ProcFind(last, 1)
-		if err == nil && proc.State == model.StatusRunning {
+		if err == nil && proc.State == model.StatusRunning && build.Branch != "master" {
 			killRunningBuild(c, proc)
 		}
 	}
@@ -355,6 +355,7 @@ func PostHook(c *gin.Context) {
 		}
 		task.Labels["platform"] = item.Platform
 		task.Labels["repo"] = b.Repo.FullName
+		task.Labels["branch"] = build.Branch
 
 		task.Data, _ = json.Marshal(rpc.Pipeline{
 			ID:      fmt.Sprint(item.Proc.ID),
