@@ -16,6 +16,7 @@ import (
 	"github.com/drone/drone-yaml/yaml/signer"
 
 	"github.com/drone/drone/core"
+	"github.com/drone/drone/operator/manager"
 
 	"github.com/sirupsen/logrus"
 )
@@ -29,6 +30,7 @@ type triggerer struct {
 	repos   core.RepositoryStore
 	users   core.UserStore
 	hooks   core.WebhookSender
+	manager manager.BuildManager
 }
 
 // New returns a new build triggerer.
@@ -41,6 +43,7 @@ func New(
 	repos core.RepositoryStore,
 	users core.UserStore,
 	hooks core.WebhookSender,
+	manager manager.BuildManager,
 ) core.Triggerer {
 	return &triggerer{
 		config:  config,
@@ -51,6 +54,7 @@ func New(
 		repos:   repos,
 		users:   users,
 		hooks:   hooks,
+		manager: manager,
 	}
 }
 
@@ -348,6 +352,36 @@ func (t *triggerer) Trigger(ctx context.Context, repo *core.Repository, base *co
 			stage.Status = core.StatusPending
 		}
 		stages[i] = stage
+	}
+
+	// TODO: Cancel running builds of the same branch via env var
+	// eg. DRONE_
+	incomplete, err := t.builds.Incomplete(ctx)
+	if err != nil {
+		logger = logger.WithError(err)
+		logger.Errorln("trigger: cannot get existing builds")
+	}
+
+	// Check if we should cancel any existing builds
+	// TODO: Add some setting... maybe to the config?
+	// How can we make things globally work this way instead of
+	// DRONE_AUTO_CANCEL_BUILD_BRANCHES=!master
+	// DRONE_NO_CONCURRENT_BUILD_BRANCHES=master
+	for _, b := range incomplete {
+		// Don't do this on master
+		if b.Source == "master" {
+			continue
+		}
+
+		// if the source is the same as the build we are oing to start, we should
+		// kill it
+		if b.Source == build.Source && b.RepoID == build.RepoID {
+			if err := t.manager.Cancel(ctx, b, repo, user); err != nil {
+				logger.WithError(err).
+					WithField("build", b.Number).
+					Warnln("trigger: cannot cancel build")
+			}
+		}
 	}
 
 	err = t.builds.Create(ctx, build, stages)

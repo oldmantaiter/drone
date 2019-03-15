@@ -6,6 +6,7 @@ package queue
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 
@@ -118,6 +119,11 @@ func (q *queue) signal(ctx context.Context) error {
 	q.Lock()
 	defer q.Unlock()
 	for _, item := range items {
+		// if the stage has build related concurrency limits we need
+		// to deal with those
+		if !withinBranchLimits(item, items) {
+			continue
+		}
 		if item.Status == core.StatusRunning {
 			continue
 		}
@@ -128,7 +134,7 @@ func (q *queue) signal(ctx context.Context) error {
 		// if the stage defines concurrency limits we
 		// need to make sure those limits are not exceeded
 		// before proceeding.
-		if withinLimits(item, items) == false {
+		if !withinLimits(item, items) {
 			continue
 		}
 
@@ -187,9 +193,13 @@ func (q *queue) start() error {
 		case <-q.ctx.Done():
 			return q.ctx.Err()
 		case <-q.ready:
-			q.signal(q.ctx)
+			if err := q.signal(q.ctx); err != nil {
+				fmt.Printf("SIGNAL FUCKED: %v\n", err)
+			}
 		case <-time.After(q.interval):
-			q.signal(q.ctx)
+			if err := q.signal(q.ctx); err != nil {
+				fmt.Printf("SIGNAL FUCKED: %v\n", err)
+			}
 		}
 	}
 }
@@ -239,4 +249,28 @@ func withinLimits(stage *core.Stage, siblings []*core.Stage) bool {
 		}
 	}
 	return count < stage.Limit
+}
+
+func withinBranchLimits(stage *core.Stage, siblings []*core.Stage) bool {
+	// if the build for this stage is running, then we should be allowed to run
+	if stage.Build.Status == core.StatusRunning {
+		return true
+	}
+
+	// if there are any other stages for other builds, check that
+	for _, sibling := range siblings {
+		if sibling.BuildID == stage.BuildID || sibling.RepoID != stage.RepoID {
+			continue
+		}
+
+		// If there is another build of master, don't do it
+		if sibling.Build.Source == "master" && stage.Build.Source == "master" {
+			// If we are older than our sibling, we should go ahead and build ourselves
+			if stage.BuildID < sibling.BuildID {
+				return true
+			}
+			return false
+		}
+	}
+	return true
 }

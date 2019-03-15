@@ -46,6 +46,7 @@ type (
 		DependsOn []string          `json:"depends_on,omitempty"`
 		Labels    map[string]string `json:"labels,omitempty"`
 		Steps     []*Step           `json:"steps,omitempty"`
+		Build     *Build            `json:"build,omitempty"`
 	}
 
 	// StageStore persists build stage information to storage.

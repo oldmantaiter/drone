@@ -103,19 +103,19 @@ func (s *stageStore) ListSteps(ctx context.Context, id int64) ([]*core.Stage, er
 func (s *stageStore) ListIncomplete(ctx context.Context) ([]*core.Stage, error) {
 	var out []*core.Stage
 	err := s.db.View(func(queryer db.Queryer, binder db.Binder) error {
-		stmt := queryUnfinished
+		stmt := queryUnfinishedWithBuild
 		// this is a workaround because mysql does not support
 		// partial or filtered indexes for low-cardinality values.
 		// For mysql we use a separate table to track pending and
 		// running jobs to avoid full table scans.
 		if s.db.Driver() == db.Mysql {
-			stmt = queryUnfinishedMysql
+			stmt = queryUnfinishedWithBuildMysql
 		}
 		rows, err := queryer.Query(stmt)
 		if err != nil {
 			return err
 		}
-		out, err = scanRows(rows)
+		out, err = scanRowsWithBuild(rows)
 		return err
 	})
 	return out, err
@@ -267,10 +267,141 @@ WHERE stage_status IN ('pending','running')
 ORDER BY stage_id ASC
 `
 
+const queryUnfinishedWithBuild = `
+SELECT
+ stage_id
+,stage_repo_id
+,stage_build_id
+,stage_number
+,stage_name
+,stage_kind
+,stage_type
+,stage_status
+,stage_error
+,stage_errignore
+,stage_exit_code
+,stage_limit
+,stage_os
+,stage_arch
+,stage_variant
+,stage_kernel
+,stage_machine
+,stage_started
+,stage_stopped
+,stage_created
+,stage_updated
+,stage_version
+,stage_on_success
+,stage_on_failure
+,stage_depends_on
+,stage_labels
+,build_id
+,build_repo_id
+,build_trigger
+,build_number
+,build_parent
+,build_status
+,build_error
+,build_event
+,build_action
+,build_link
+,build_timestamp
+,build_title
+,build_message
+,build_before
+,build_after
+,build_ref
+,build_source_repo
+,build_source
+,build_target
+,build_author
+,build_author_name
+,build_author_email
+,build_author_avatar
+,build_sender
+,build_deploy
+,build_started
+,build_finished
+,build_created
+,build_updated
+,build_version
+FROM stages
+  LEFT JOIN builds
+	ON stages.stage_build_id=builds.build_id
+  WHERE stage_status IN ('pending', 'running')
+ORDER BY stage_id ASC
+`
+
 const queryUnfinishedMysql = queryBase + `
 WHERE stage_id IN (SELECT stage_id FROM stages_unfinished)
   AND stage_status IN ('pending','running')
 ORDER BY stage_id ASC
+`
+
+const queryUnfinishedWithBuildMysql = `
+SELECT
+ stage_id
+,stage_repo_id
+,stage_build_id
+,stage_number
+,stage_name
+,stage_kind
+,stage_type
+,stage_status
+,stage_error
+,stage_errignore
+,stage_exit_code
+,stage_limit
+,stage_os
+,stage_arch
+,stage_variant
+,stage_kernel
+,stage_machine
+,stage_started
+,stage_stopped
+,stage_created
+,stage_updated
+,stage_version
+,stage_on_success
+,stage_on_failure
+,stage_depends_on
+,stage_labels
+,build_id
+,build_repo_id
+,build_trigger
+,build_number
+,build_parent
+,build_status
+,build_error
+,build_event
+,build_action
+,build_link
+,build_timestamp
+,build_title
+,build_message
+,build_before
+,build_after
+,build_ref
+,build_source_repo
+,build_source
+,build_target
+,build_author
+,build_author_name
+,build_author_email
+,build_author_avatar
+,build_sender
+,build_deploy
+,build_started
+,build_finished
+,build_created
+,build_updated
+,build_version
+FROM stages
+  LEFT JOIN builds
+	ON stages.stage_build_id=builds.build_id
+  WHERE stages.stage_id IN (SELECT stage_id FROM stages_unfinished)
+  AND stages.stage_status IN ('pending', 'running')
+ORDER BY stages.stage_id ASC
 `
 
 const queryBuild = queryBase + `

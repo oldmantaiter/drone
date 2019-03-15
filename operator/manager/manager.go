@@ -7,10 +7,12 @@ package manager
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"time"
 
 	"github.com/drone/drone/core"
+	"github.com/drone/drone/logger"
 	"github.com/drone/drone/store/shared/db"
 
 	"github.com/hashicorp/go-multierror"
@@ -71,6 +73,9 @@ type (
 
 		// UploadBytes uploads the full logs
 		UploadBytes(ctx context.Context, step int64, b []byte) error
+
+		// Cancel cancels a build
+		Cancel(ctx context.Context, build *core.Build, repo *core.Repository, user *core.User) error
 	}
 
 	// Request provildes filters when requesting a pending
@@ -462,4 +467,85 @@ func (m *Manager) UploadBytes(ctx context.Context, step int64, data []byte) erro
 		logger.Warnln("manager: cannot upload complete logs")
 	}
 	return err
+}
+
+func (m *Manager) Cancel(ctx context.Context, build *core.Build, repo *core.Repository, user *core.User) error {
+	if build.Status != core.StatusPending &&
+		build.Status != core.StatusRunning {
+		return fmt.Errorf("cannot cancel completed build")
+	}
+
+	build.Status = core.StatusKilled
+	build.Finished = time.Now().Unix()
+	if build.Started == 0 {
+		build.Started = time.Now().Unix()
+	}
+
+	if err := m.Builds.Update(ctx, build); err != nil {
+		return fmt.Errorf("cannot update build status to cancelled: %v", err)
+	}
+
+	if err := m.Scheduler.Cancel(ctx, build.ID); err != nil {
+		return fmt.Errorf("cannot signal cancelled build is complete: %v", err)
+	}
+
+	if user != nil {
+		if err := m.Status.Send(ctx, user, &core.StatusInput{
+			Repo:  repo,
+			Build: build,
+		}); err != nil {
+			return fmt.Errorf("cannot set status: %v", err)
+		}
+	}
+
+	stages, err := m.Stages.ListSteps(ctx, build.ID)
+	if err != nil {
+		return fmt.Errorf("cannot list build stages: %v", err)
+	}
+
+	for _, stage := range stages {
+		if stage.IsDone() {
+			continue
+		}
+		if stage.Started != 0 {
+			stage.Status = core.StatusKilled
+		} else {
+			stage.Status = core.StatusSkipped
+			stage.Started = time.Now().Unix()
+		}
+		stage.Stopped = time.Now().Unix()
+		if err := m.Stages.Update(ctx, stage); err != nil {
+			return fmt.Errorf("cannot update stage status: %v", err)
+		}
+
+		for _, step := range stage.Steps {
+			if step.IsDone() {
+				continue
+			}
+			if step.Started != 0 {
+				step.Status = core.StatusKilled
+			} else {
+				step.Status = core.StatusSkipped
+				step.Started = time.Now().Unix()
+			}
+			step.Stopped = time.Now().Unix()
+			step.ExitCode = 130
+			if err := m.Steps.Update(ctx, step); err != nil {
+				return fmt.Errorf("cannot update step status: %v", err)
+			}
+		}
+	}
+
+	build.Stages = stages
+	payload := &core.WebhookData{
+		Event:  core.WebhookEventBuild,
+		Action: core.WebhookActionUpdated,
+		Repo:   repo,
+		Build:  build,
+	}
+	if err := m.Webhook.Send(ctx, payload); err != nil {
+		logger.FromContext(ctx).WithError(err).
+			Warnln("manager: cannot send global webhook")
+	}
+	return nil
 }

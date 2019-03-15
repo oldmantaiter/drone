@@ -79,6 +79,7 @@ func TestTrigger(t *testing.T) {
 		mockRepos,
 		mockUsers,
 		mockWebhooks,
+		nil,
 	)
 
 	build, err := triggerer.Trigger(noContext, dummyRepo, dummyHook)
@@ -95,6 +96,7 @@ func TestTrigger(t *testing.T) {
 // message includes the [CI SKIP] keyword.
 func TestTrigger_SkipCI(t *testing.T) {
 	triggerer := New(
+		nil,
 		nil,
 		nil,
 		nil,
@@ -129,6 +131,7 @@ func TestTrigger_NoOwner(t *testing.T) {
 		nil,
 		mockUsers,
 		nil,
+		nil,
 	)
 
 	_, err := triggerer.Trigger(noContext, dummyRepo, dummyHook)
@@ -157,6 +160,7 @@ func TestTrigger_MissingYaml(t *testing.T) {
 		nil,
 		nil,
 		mockUsers,
+		nil,
 		nil,
 	)
 
@@ -192,6 +196,7 @@ func TestTrigger_ErrorYaml(t *testing.T) {
 		nil,
 		mockRepos,
 		mockUsers,
+		nil,
 		nil,
 	)
 
@@ -232,6 +237,7 @@ func TestTrigger_SkipBranch(t *testing.T) {
 		nil,
 		mockUsers,
 		nil,
+		nil,
 	)
 
 	_, err := triggerer.Trigger(noContext, dummyRepo, dummyHook)
@@ -260,6 +266,7 @@ func TestTrigger_SkipEvent(t *testing.T) {
 		nil,
 		nil,
 		mockUsers,
+		nil,
 		nil,
 	)
 
@@ -293,6 +300,7 @@ func TestTrigger_ErrorIncrement(t *testing.T) {
 		nil,
 		mockRepos,
 		mockUsers,
+		nil,
 		nil,
 	)
 

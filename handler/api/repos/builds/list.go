@@ -41,7 +41,7 @@ func HandleList(
 		offset, _ := strconv.Atoi(page)
 		limit, _ := strconv.Atoi(perPage)
 		if limit < 1 || limit > 100 {
-			limit = 25
+			limit = 100
 		}
 		switch offset {
 		case 0, 1:

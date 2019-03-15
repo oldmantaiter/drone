@@ -77,6 +77,9 @@ type BuildStore interface {
 	// datastore by repository id (DEPRECATED).
 	Running(context.Context) ([]*Build, error)
 
+	// Incomplete returns a list of incomplete builds
+	Incomplete(context.Context) ([]*Build, error)
+
 	// Create persists a build to the datastore.
 	Create(context.Context, *Build, []*Stage) error
 

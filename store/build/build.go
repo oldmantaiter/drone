@@ -151,6 +151,20 @@ func (s *buildStore) Running(ctx context.Context) ([]*core.Build, error) {
 	return out, err
 }
 
+// Incomplete returns a list of incomplete builds from the datastore by repository id.
+func (s *buildStore) Incomplete(ctx context.Context) ([]*core.Build, error) {
+	var out []*core.Build
+	err := s.db.View(func(queryer db.Queryer, binder db.Binder) error {
+		rows, err := queryer.Query(queryIncomplete)
+		if err != nil {
+			return err
+		}
+		out, err = scanRows(rows)
+		return err
+	})
+	return out, err
+}
+
 // Create persists a build to the datacore.
 func (s *buildStore) Create(ctx context.Context, build *core.Build, stages []*core.Stage) error {
 	if s.db.Driver() == db.Postgres {
@@ -386,6 +400,17 @@ WHERE EXISTS (
     FROM stages
     WHERE stages.stage_build_id = builds.build_id
     AND stages.stage_status = 'running'
+)
+ORDER BY build_id ASC
+`
+
+const queryIncomplete = queryBase + `
+FROM builds
+WHERE EXISTS (
+		SELECT stage_id
+		FROM stages
+		WHERE stages.stage_build_id = builds.build_id
+		AND stages.stage_status IN ('pending', 'running')
 )
 ORDER BY build_id ASC
 `

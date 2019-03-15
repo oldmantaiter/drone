@@ -26,6 +26,7 @@ import (
 	"github.com/drone/drone/handler/api/user"
 	"github.com/drone/drone/handler/api/users"
 	"github.com/drone/drone/logger"
+	"github.com/drone/drone/operator/manager"
 
 	"github.com/go-chi/chi"
 	"github.com/go-chi/chi/middleware"
@@ -64,6 +65,7 @@ func New(
 	triggerer core.Triggerer,
 	users core.UserStore,
 	webhook core.WebhookSender,
+	manager manager.BuildManager,
 ) Server {
 	return Server{
 		Builds:    builds,
@@ -88,6 +90,7 @@ func New(
 		Triggerer: triggerer,
 		Users:     users,
 		Webhook:   webhook,
+		Manager: manager,
 	}
 }
 
@@ -115,6 +118,7 @@ type Server struct {
 	Triggerer core.Triggerer
 	Users     core.UserStore
 	Webhook   core.WebhookSender
+	Manager manager.BuildManager
 }
 
 // Handler returns an http.Handler
@@ -161,7 +165,7 @@ func (s Server) Handler() http.Handler {
 
 			r.With(
 				acl.CheckWriteAccess(),
-			).Delete("/{number}", builds.HandleCancel(s.Users, s.Repos, s.Builds, s.Stages, s.Steps, s.Status, s.Scheduler, s.Webhook))
+			).Delete("/{number}", builds.HandleCancel(s.Users, s.Repos, s.Builds, s.Manager))
 
 			r.With(
 				acl.CheckAdminAccess(),

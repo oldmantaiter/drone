@@ -155,6 +155,72 @@ func scanRowStep(scanner db.Scanner, stage *core.Stage, step *nullStep) error {
 	return err
 }
 
+func scanRowBuild(scanner db.Scanner, stage *core.Stage, build *core.Build) error {
+	depJSON := types.JSONText{}
+	labJSON := types.JSONText{}
+	err := scanner.Scan(
+		&stage.ID,
+		&stage.RepoID,
+		&stage.BuildID,
+		&stage.Number,
+		&stage.Name,
+		&stage.Kind,
+		&stage.Type,
+		&stage.Status,
+		&stage.Error,
+		&stage.ErrIgnore,
+		&stage.ExitCode,
+		&stage.Limit,
+		&stage.OS,
+		&stage.Arch,
+		&stage.Variant,
+		&stage.Kernel,
+		&stage.Machine,
+		&stage.Started,
+		&stage.Stopped,
+		&stage.Created,
+		&stage.Updated,
+		&stage.Version,
+		&stage.OnSuccess,
+		&stage.OnFailure,
+		&depJSON,
+		&labJSON,
+		&build.ID,
+		&build.RepoID,
+		&build.Trigger,
+		&build.Number,
+		&build.Parent,
+		&build.Status,
+		&build.Error,
+		&build.Event,
+		&build.Action,
+		&build.Link,
+		&build.Timestamp,
+		&build.Title,
+		&build.Message,
+		&build.Before,
+		&build.After,
+		&build.Ref,
+		&build.Fork,
+		&build.Source,
+		&build.Target,
+		&build.Author,
+		&build.AuthorName,
+		&build.AuthorEmail,
+		&build.AuthorAvatar,
+		&build.Sender,
+		&build.Deploy,
+		&build.Started,
+		&build.Finished,
+		&build.Created,
+		&build.Updated,
+		&build.Version,
+	)
+	json.Unmarshal(depJSON, &stage.DependsOn)
+	json.Unmarshal(labJSON, &stage.Labels)
+	return err
+}
+
 // helper function scans the sql.Row and copies the column
 // values to the destination object.
 func scanRows(rows *sql.Rows) ([]*core.Stage, error) {
@@ -192,6 +258,29 @@ func scanRowsWithSteps(rows *sql.Rows) ([]*core.Stage, error) {
 		}
 		if step.ID.Int64 != 0 {
 			curr.Steps = append(curr.Steps, step.value())
+		}
+	}
+	return stages, nil
+}
+
+func scanRowsWithBuild(rows *sql.Rows) ([]*core.Stage, error) {
+	defer rows.Close()
+
+	stages := []*core.Stage{}
+	var curr *core.Stage
+	for rows.Next() {
+		stage := new(core.Stage)
+		build := new(core.Build)
+		err := scanRowBuild(rows, stage, build)
+		if err != nil {
+			return nil, err
+		}
+		if curr == nil || curr.ID != stage.ID {
+			curr = stage
+			if build.ID != 0 {
+				curr.Build = build
+			}
+			stages = append(stages, stage)
 		}
 	}
 	return stages, nil

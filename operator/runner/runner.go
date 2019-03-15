@@ -158,6 +158,7 @@ func (r *Runner) Run(ctx context.Context, id int64) error {
 	environ := combineEnviron(
 		agentEnviron(r),
 		buildEnviron(m.Build),
+		stageEnviron(m.Stage),
 		repoEnviron(m.Repo),
 		systemEnviron(m.System),
 		linkEnviron(m.Repo, m.Build, m.System),
@@ -373,7 +374,6 @@ func (r *Runner) Run(ctx context.Context, id int64) error {
 			if ok {
 				step.Status = core.StatusRunning
 				step.Started = time.Now().Unix()
-
 				s.Step.Envs["DRONE_STEP_NAME"] = step.Name
 				s.Step.Envs["DRONE_STEP_NUMBER"] = fmt.Sprint(step.Number)
 			}

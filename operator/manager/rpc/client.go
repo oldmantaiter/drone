@@ -206,6 +206,11 @@ func (s *Client) UploadBytes(ctx context.Context, step int64, data []byte) error
 	return s.upload(noContext, endpoint, data)
 }
 
+func (s *Client) Cancel(ctx context.Context, build *core.Build, repo *core.Repository, user *core.User) error {
+	// TODO: Make this a real thing
+	return nil
+}
+
 func (s *Client) send(ctx context.Context, path string, in, out interface{}) error {
 	// Source a buffer from a pool. The agent may generate a
 	// large number of small requests for log entries. This will

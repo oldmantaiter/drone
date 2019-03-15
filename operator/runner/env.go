@@ -73,6 +73,7 @@ func buildEnviron(build *core.Build) map[string]string {
 		"DRONE_COMMIT_AFTER":         build.After,
 		"DRONE_COMMIT_REF":           build.Ref,
 		"DRONE_COMMIT_BRANCH":        build.Target,
+		"DRONE_COMMIT_BRANCH_NORM":   branchNormRe.ReplaceAllString(build.Target, "-"),
 		"DRONE_COMMIT_LINK":          build.Link,
 		"DRONE_COMMIT_MESSAGE":       build.Message,
 		"DRONE_COMMIT_AUTHOR":        build.Author,
@@ -110,7 +111,10 @@ func linkEnviron(repo *core.Repository, build *core.Build, system *core.System) 
 
 // regular expression to extract the pull request number
 // from the git ref (e.g. refs/pulls/{d}/head)
-var re = regexp.MustCompile("\\d+")
+var (
+	re           = regexp.MustCompile("\\d+")
+	branchNormRe = regexp.MustCompile("[^a-zA-Z0-9\\-_]+")
+)
 
 // helper function combines one or more maps of environment
 // variables into a single map.

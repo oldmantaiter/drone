@@ -105,7 +105,7 @@ func InjectRepository(
 			// because the permissions are synced with the remote
 			// system (e.g. github) they may be stale. If the permissions
 			// are stale they are refreshed below.
-			if perm.Synced == 0 || time.Unix(perm.Synced, 0).Add(time.Hour).Before(time.Now()) {
+			if (perm.Synced == 0 || time.Unix(perm.Synced, 0).Add(time.Hour).Before(time.Now())) && !user.Machine {
 				log.Debugln("api: sync repository permissions")
 
 				permv, err := repoz.FindPerm(ctx, user, repo.Slug)
