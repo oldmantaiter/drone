@@ -118,12 +118,33 @@ func (q *queue) signal(ctx context.Context) error {
 
 	q.Lock()
 	defer q.Unlock()
+
+	// Get the earliest pending build for each branch
+	branchBuilds := map[string]int64{}
 	for _, item := range items {
-		// if the stage has build related concurrency limits we need
-		// to deal with those
-		if !withinBranchLimits(item, items) {
+		// if the build was killed or skipped, don't include it
+		switch item.Build.Status {
+		case core.StatusPending,
+			core.StatusRunning:
+		default:
 			continue
 		}
+		key := fmt.Sprintf("%d||%s", item.RepoID, item.Build.Source)
+		v := branchBuilds[key]
+		if item.BuildID < v || v == 0 {
+			branchBuilds[key] = item.BuildID
+		}
+	}
+
+	for _, item := range items {
+		// Check if this is the earliest build if we are pending
+		if item.Build.Status != core.StatusRunning {
+			key := fmt.Sprintf("%d||%s", item.RepoID, item.Build.Source)
+			if branchBuilds[key] != item.BuildID {
+				continue
+			}
+		}
+
 		if item.Status == core.StatusRunning {
 			continue
 		}
@@ -251,26 +272,40 @@ func withinLimits(stage *core.Stage, siblings []*core.Stage) bool {
 	return count < stage.Limit
 }
 
-func withinBranchLimits(stage *core.Stage, siblings []*core.Stage) bool {
-	// if the build for this stage is running, then we should be allowed to run
-	if stage.Build.Status == core.StatusRunning {
-		return true
-	}
+// func withinBranchLimits(stage *core.Stage, siblings []*core.Stage) bool {
+// 	// if the build for this stage is running, then we should be allowed to run
+// 	if stage.Build.Status == core.StatusRunning {
+// 		return true
+// 	}
 
-	// if there are any other stages for other builds, check that
-	for _, sibling := range siblings {
-		if sibling.BuildID == stage.BuildID || sibling.RepoID != stage.RepoID {
-			continue
-		}
+// 	// if there are any other stages for other builds, check that
+// 	for _, sibling := range siblings {
+// 		if sibling.BuildID == stage.BuildID || sibling.RepoID != stage.RepoID {
+// 			continue
+// 		}
 
-		// If there is another build of master, don't do it
-		if sibling.Build.Source == "master" && stage.Build.Source == "master" {
-			// If we are older than our sibling, we should go ahead and build ourselves
-			if stage.BuildID < sibling.BuildID {
-				return true
-			}
-			return false
-		}
-	}
-	return true
-}
+// 		// Check that we
+// 		if sibling.Build.Source == "master" && stage.Build.Source == "master" {
+// 			if sibling.Build.Status == core.StatusRunning {
+// 				return false
+// 			}
+// 		}
+
+// 		// If there is another build of master, don't do it
+// 		if sibling.Build.Source == "master" && stage.Build.Source == "master" {
+// 			// If the sibling is not running, keep looking
+// 			if sibling.Build.Status != core.StatusRunning {
+// 				continue
+// 			}
+
+// 			// RACE CONDITION MOTHERFUCKER
+
+// 			// If the stage is less than the sibling, keep looking
+// 			if stage.BuildID < sibling.BuildID {
+// 				continue
+// 			}
+// 			return false
+// 		}
+// 	}
+// 	return true
+// }

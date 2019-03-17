@@ -400,7 +400,7 @@ FROM stages
   LEFT JOIN builds
 	ON stages.stage_build_id=builds.build_id
   WHERE stages.stage_id IN (SELECT stage_id FROM stages_unfinished)
-  AND stages.stage_status IN ('pending', 'running')
+  AND stages.stage_status IN ('pending', 'running', 'skipped')
 ORDER BY stages.stage_id ASC
 `
 

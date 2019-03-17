@@ -84,7 +84,7 @@ func HandleCancel(
 				WithField("build", build.Number).
 				WithField("namespace", namespace).
 				WithField("name", name).
-				Warnln("api: cannot cancel build")
+				Warnf("api: cannot cancel build: %v", err)
 			render.InternalError(w, errors.New("Build failed to be cancelled"))
 			return
 		}

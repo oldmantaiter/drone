@@ -396,7 +396,7 @@ var createTriggerStageInsert = `
 CREATE TRIGGER stage_insert AFTER INSERT ON stages
 FOR EACH ROW
 BEGIN
-   IF NEW.stage_status IN ('pending','running') THEN
+   IF NEW.stage_status IN ('pending','running','waiting_on_dependencies') THEN
       INSERT INTO stages_unfinished VALUES (NEW.stage_id);
    END IF;
 END;
@@ -407,9 +407,9 @@ CREATE TRIGGER stage_update AFTER UPDATE ON stages
 FOR EACH ROW
 BEGIN
   IF NEW.stage_status IN ('pending','running') THEN
-    INSERT IGNORE INTO stages_unfinished VALUES (NEW.stage_id);
-  ELSEIF OLD.stage_status IN ('pending','running') THEN
-    DELETE FROM stages_unfinished WHERE stage_id = OLD.stage_id;
+	INSERT IGNORE INTO stages_unfinished VALUES (NEW.stage_id);
+  ELSEIF (OLD.stage_status IN ('pending','running','waiting_on_dependencies') AND NEW.stage_status != 'skipped') OR (OLD.stage_status IN ('skipped') AND NEW.stage_status = 'skipped') THEN
+	DELETE FROM stages_unfinished WHERE stage_id = OLD.stage_id;
   END IF;
 END;
 `

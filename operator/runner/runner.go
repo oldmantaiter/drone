@@ -139,6 +139,12 @@ func (r *Runner) Run(ctx context.Context, id int64) error {
 		},
 	)
 
+	// If the stage was skipped, it might have dependencies that need to be resolved
+	logger.Infof("runner: proceeding with stage status '%s'", m.Stage.Status)
+	if m.Stage.Status == core.StatusSkipped {
+		return r.Manager.AfterAll(ctx, m.Stage)
+	}
+
 	netrc, err := r.Manager.Netrc(ctx, m.Repo.ID)
 	if err != nil {
 		logger = logger.WithError(err)
@@ -345,6 +351,14 @@ func (r *Runner) Run(ctx context.Context, id int64) error {
 		m.Stage.Steps = append(m.Stage.Steps, dst)
 	}
 
+	hasFailures := false
+	for _, st := range m.Build.Stages {
+		if st.IsFailed() {
+			hasFailures = true
+			break
+		}
+	}
+
 	hooks := &runtime.Hook{
 		BeforeEach: func(s *runtime.State) error {
 			r.Lock()
@@ -363,7 +377,7 @@ func (r *Runner) Run(ctx context.Context, id int64) error {
 			s.Step.Envs["DRONE_JOB_STARTED"] = strconv.FormatInt(s.Runtime.Time, 10)
 			s.Step.Envs["DRONE_JOB_FINISHED"] = strconv.FormatInt(time.Now().Unix(), 10)
 
-			if s.Runtime.Error != nil {
+			if s.Runtime.Error != nil || hasFailures {
 				s.Step.Envs["CI_BUILD_STATUS"] = "failure"
 				s.Step.Envs["CI_JOB_STATUS"] = "failure"
 				s.Step.Envs["DRONE_BUILD_STATUS"] = "failure"

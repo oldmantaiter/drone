@@ -27,9 +27,6 @@ func isLastStage(stage *core.Stage, stages []*core.Stage) bool {
 		if stage.Number == sibling.Number {
 			continue
 		}
-		if sibling.Status == core.StatusSkipped {
-			continue
-		}
 		if sibling.Updated > stage.Updated {
 			return false
 		} else if sibling.Updated == stage.Updated &&
@@ -74,9 +71,6 @@ func isLastDep(curr, next *core.Stage, stages []*core.Stage) bool {
 	}
 	for _, sibling := range stages {
 		if _, ok := deps[sibling.Name]; !ok {
-			continue
-		}
-		if sibling.Status == core.StatusSkipped {
 			continue
 		}
 		if sibling.Updated > curr.Updated {

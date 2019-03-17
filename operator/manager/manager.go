@@ -207,8 +207,10 @@ func (m *Manager) Accept(ctx context.Context, id int64, machine string) error {
 	}
 
 	stage.Machine = machine
-	stage.Status = core.StatusPending
-	stage.Updated = time.Now().Unix()
+	if stage.Status != core.StatusSkipped {
+		stage.Status = core.StatusPending
+		stage.Updated = time.Now().Unix()
+	}
 
 	err = m.Stages.Update(noContext, stage)
 	if err == db.ErrOptimisticLock {
@@ -275,6 +277,13 @@ func (m *Manager) Details(ctx context.Context, id int64) (*Context, error) {
 		logger.Warnln("manager: cannot list secrets")
 		return nil, err
 	}
+	stages, err := m.Stages.List(noContext, build.ID)
+	if err != nil {
+		logger = logger.WithError(err)
+		logger.Warnln("manager: cannot list stages")
+		return nil, err
+	}
+	build.Stages = stages
 	// TODO(bradrydzewski) can we delegate filtering
 	// secrets to the agent? If not, we should add
 	// unit tests.
@@ -481,11 +490,15 @@ func (m *Manager) Cancel(ctx context.Context, build *core.Build, repo *core.Repo
 		build.Started = time.Now().Unix()
 	}
 
-	if err := m.Builds.Update(ctx, build); err != nil {
+	if err := retryDatabaseAction(func() error {
+		return m.Builds.Update(ctx, build)
+	}); err != nil {
 		return fmt.Errorf("cannot update build status to cancelled: %v", err)
 	}
 
-	if err := m.Scheduler.Cancel(ctx, build.ID); err != nil {
+	if err := retryDatabaseAction(func() error {
+		return m.Scheduler.Cancel(ctx, build.ID)
+	}); err != nil {
 		return fmt.Errorf("cannot signal cancelled build is complete: %v", err)
 	}
 
@@ -510,11 +523,24 @@ func (m *Manager) Cancel(ctx context.Context, build *core.Build, repo *core.Repo
 		if stage.Started != 0 {
 			stage.Status = core.StatusKilled
 		} else {
-			stage.Status = core.StatusSkipped
+			stage.Status = core.StatusKilled
 			stage.Started = time.Now().Unix()
 		}
 		stage.Stopped = time.Now().Unix()
-		if err := m.Stages.Update(ctx, stage); err != nil {
+		if err := retryDatabaseAction(func() error {
+			if err := m.Stages.Update(ctx, stage); err != nil {
+				if err == db.ErrOptimisticLock {
+					// Get the latest
+					s, findErr := m.Stages.Find(ctx, stage.ID)
+					if findErr != nil {
+						return findErr
+					}
+					stage = s
+					return err
+				}
+			}
+			return nil
+		}); err != nil {
 			return fmt.Errorf("cannot update stage status: %v", err)
 		}
 
@@ -525,12 +551,25 @@ func (m *Manager) Cancel(ctx context.Context, build *core.Build, repo *core.Repo
 			if step.Started != 0 {
 				step.Status = core.StatusKilled
 			} else {
-				step.Status = core.StatusSkipped
+				step.Status = core.StatusKilled
 				step.Started = time.Now().Unix()
 			}
 			step.Stopped = time.Now().Unix()
 			step.ExitCode = 130
-			if err := m.Steps.Update(ctx, step); err != nil {
+			if err := retryDatabaseAction(func() error {
+				if err := m.Steps.Update(ctx, step); err != nil {
+					if err == db.ErrOptimisticLock {
+						// Get the latest
+						s, findErr := m.Steps.Find(ctx, step.ID)
+						if findErr != nil {
+							return findErr
+						}
+						step = s
+						return err
+					}
+				}
+				return nil
+			}); err != nil {
 				return fmt.Errorf("cannot update step status: %v", err)
 			}
 		}
@@ -548,4 +587,20 @@ func (m *Manager) Cancel(ctx context.Context, build *core.Build, repo *core.Repo
 			Warnln("manager: cannot send global webhook")
 	}
 	return nil
+}
+
+func retryDatabaseAction(fn func() error) (err error) {
+	backoff := 50 * time.Millisecond
+	for i := 0; i < 5; i++ {
+		if err = fn(); err != nil {
+			if err == db.ErrOptimisticLock {
+				backoff = time.Duration(i+1) * backoff
+				time.Sleep(backoff)
+				continue
+			}
+			return err
+		}
+		return nil
+	}
+	return err
 }
